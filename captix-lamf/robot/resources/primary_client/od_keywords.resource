@@ -64,6 +64,25 @@ TC_03 Validate OTP
     Log To Console     TC_03 Validate OTP: ${json["status"]["message"]}
     RETURN    ${platformCustomerId}
 
+TC_04 getCustomer_details
+    [Arguments]        ${platform_custId}
+    [Documentation]    Get Customer Details
+    Create Session     get_CustomerDetails    url=${QA_URL}     verify=true
+
+    ${params}=         Create Dictionary    platformCustomerId=${platform_custId}
+    ${headers}=        Build Get Headers
+    ${response}        GET On Session       get_CustomerDetails     /api/v1/customer     headers=${headers}     params=${params}
+    ${status_code}=    Convert To String    ${response.status_code}
+    Should Be Equal    ${status_code}       ${expected_code}
+    ${json_data}       Convert String To Json    ${response.content}
+    ${status_msg}      Get Value From Json    ${json_data}    status.message
+    ${msg}             Get From List          ${status_msg}     0
+    ${name}            Get Value From Json    ${json_data}    data[0].firstName
+    ${cust_name}       Get From List          ${name}     0
+    ${pan}             Get Value From Json    ${json_data}    data[0].pan
+    ${cust_pan}        Get From List          ${pan}           0
+    Log To Console     TC_04 getCustomer_details: ${msg}, customerName:${cust_name}, customerPan:${cust_pan}
+
 TC_05 getProduct
     [Documentation]    Get product details
     Create Session     getProduct_details     url=${QA_URL}     verify=true
@@ -100,3 +119,51 @@ TC_06 Create Loan Application
     Should Not Be Empty    ${loanApp_No}
     Log To Console     TC_06: ${json["status"]["message"]}, LoanApp_No: ${loanApp_No}
     RETURN    ${loanApp_No}    ${productType}
+
+TC_07 emailInitiate
+    [Arguments]    ${loanApp_No}
+    Create Session    email_init    url=${QA_URL}    verify=true
+    ${body}=    Create Dictionary
+    ...    loanApplicationNo=${loanApp_No}
+    ...    email=${EMAIL}
+    ${headers}=    Build Headers    ${body}
+    ${response}=    POST On Session    email_init    /api/v1/kyc/email/initiate-otp
+    ...    json=${body}    headers=${headers}
+    ${json}=    Set Variable    ${response.json()}
+    Should Be Equal As Integers    ${response.status_code}    ${expected_code}
+    Should Be Equal    ${json["status"]["code"]}    OTP_INITIATED
+    ${email_referId}=    Set Variable    ${json["data"]["referenceId"]}
+    Should Not Be Empty    ${email_referId}
+    Log To Console     TC_07 emailInitiate: ${json["status"]["message"]}, RefID: ${email_referId}
+    RETURN    ${email_referId}
+
+TC_08 emailValidate
+    [Arguments]    ${email_referId}
+    Create Session    email_validate    url=${QA_URL}    verify=true
+    ${body}=    Create Dictionary
+    ...    referenceId=${email_referId}
+    ...    otp=123456
+    ${headers}=    Build Headers    ${body}
+    ${response}=    POST On Session    email_validate    /api/v1/kyc/email/validate-otp
+    ...    json=${body}    headers=${headers}
+    ${json}=    Set Variable    ${response.json()}
+    Should Be Equal As Integers    ${response.status_code}    ${expected_code}
+    Should Be Equal    ${json["status"]["code"]}    OTP_VALIDATED
+    Should Be Equal    ${json["data"]["platformStatus"]}    COMPLETED
+    Should Be Equal    ${json["data"]["externalStatus"]}    EMAIL_VERIFIED
+    Log To Console     TC_08 emailValidate: ${json["status"]["message"]}
+
+TC getCodeValue
+    [Documentation]    Get Code Value Details
+    Create Session     get_CodeValue     url=${QA_URL}     verify=true
+
+    ${params}=         Create Dictionary    codeId=${codeValue_Id}
+    ${headers}=        Build Get Headers
+
+    ${response}        GET On Session     get_CodeValue     /api/v1/code-value     headers=${headers}     params=${params}
+    ${status_code}=    Convert To String    ${response.status_code}
+    Should Be Equal    ${status_code}       ${expected_code}
+    ${json_data}       Convert String To Json    ${response.content}
+    ${status_msg}      Get Value From Json    ${json_data}    status.message
+    ${msg}             Get From List          ${status_msg}     0
+    Log To Console     TC_09 getCodeValue: ${msg}
