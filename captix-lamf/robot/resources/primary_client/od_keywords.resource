@@ -167,3 +167,76 @@ TC getCodeValue
     ${status_msg}      Get Value From Json    ${json_data}    status.message
     ${msg}             Get From List          ${status_msg}     0
     Log To Console     TC_09 getCodeValue: ${msg}
+
+TC_09 updateLoanApplication
+    [Arguments]    ${loanApp_No}
+    Create Session    update_loan    url=${QA_URL}    verify=true
+    ${communication_address}=    Create Dictionary
+    ...    addressLine1=Flat No. 123
+    ...    addressLine2=Sample Apartments, Sample Locality
+    ...    addressLine3=
+    ...    city=Sample City
+    ...    state=Sample State
+    ...    pincode=600001
+    ${body}=    Create Dictionary
+    ...    loanApplicationNo=${loanApp_No}
+    ...    fatherName=${FATHER_NAME}
+    ...    sameAsPermanentAddress=${True}
+    ...    communicationAddress=${communication_address}
+    ${headers}=    Build Headers    ${body}
+    ${response}=    PUT On Session    update_loan    /api/v1/loan-application/update
+    ...    json=${body}    headers=${headers}
+    ${json}=    Set Variable    ${response.json()}
+    Should Be Equal As Integers    ${response.status_code}    ${expected_code}
+    Should Be Equal    ${json["status"]["code"]}    LOAN_UPDATE
+    Should Be Equal    ${json["data"]["platformStatus"]}    COMPLETED
+    Should Be Equal    ${json["data"]["externalStatus"]}    LOAN_UPDATED
+    Log To Console     TC_09: ${json["status"]["message"]}
+
+TC_10 getCust_BankDetail
+    [Arguments]        ${platform_custId}
+    [Documentation]    Get Customer Bank Details
+    Create Session     get_CustBankDetails     url=${QA_URL}     verify=true
+
+    ${headers}=        Build Get Headers
+    ${response}        GET On Session       get_CustBankDetails     /api/v1/customer/bankAccounts/${platform_custId}     headers=${headers}
+    ${status_code}=    Convert To String    ${response.status_code}
+    Should Be Equal    ${status_code}       ${expected_code}
+    ${json_data}       Convert String To Json    ${response.content}
+    ${status_msg}      Get Value From Json    ${json_data}     status.message
+    ${msg}             Get From List          ${status_msg}     0
+    ${AccDetail}       Get Value From Json    ${json_data}     data.bankDetails[0].bankAccountNumber
+    ${bankAccount}     Get From List          ${AccDetail}      0
+    ${ifscCode}        Get Value From Json    ${json_data}     data.bankDetails[0].ifscCode
+    ${ifsc}            Get From List          ${ifscCode}       0
+    ${bank}            Get Value From Json    ${json_data}     data.bankDetails[0].bankName
+    ${bankName}        Get From List          ${bank}           0
+    ${AccountType}     Get Value From Json    ${json_data}     data.bankDetails[0].bankAccountType
+    ${bankAccountType}    Get From List       ${AccountType}    0
+    ${HolderName}      Get Value From Json    ${json_data}     data.bankDetails[0].accountHolderName
+    ${accountHolderName}     Get From List    ${HolderName}     0
+
+    Log To Console     TC_10 Get Customer Bank Details: ${msg}
+    RETURN     ${bankAccount}     ${ifsc}     ${bankName}     ${bankAccountType}     ${accountHolderName}
+
+TC_11 create_BankInt
+    [Arguments]           ${loanApp_No}     ${bankAccount}     ${ifsc}     ${bankName}     ${bankAccountType}     ${accountHolderName}
+    [Documentation]       Creating Bank details using CustID
+    Create Session        Bank_Init     url=${QA_URL}     verify=true
+
+    ${data}            Create Dictionary
+    ...                loanApplicationNo=${loanApp_No}
+    ...                bankAccountNumber=${bankAccount}
+    ...                ifscCode=${ifsc}
+    ...                bankName=${bankName}
+    ...                bankAccountType=${bankAccountType}
+    ...                accountHolderName=${accountHolderName}
+    ${headers}=        Build Headers    ${data}
+
+    ${response}        POST On Session       Bank_Init     /api/v1/bank/init     json=${data}     headers=${headers}
+    ${status_code}=    Convert To String     ${response.status_code}
+    Should Be Equal    ${status_code}        ${expected_code}
+    ${json_data}       Convert String To Json    ${response.content}
+    ${status_msg}      Get Value From Json    ${json_data}    status.message
+    ${msg}     Get From List    ${status_msg}         0
+    Log To Console     TC_11: ${msg}
