@@ -240,3 +240,129 @@ TC_11 create_BankInt
     ${status_msg}      Get Value From Json    ${json_data}    status.message
     ${msg}     Get From List    ${status_msg}         0
     Log To Console     TC_11: ${msg}
+
+TC_12 CAMS_Fetch_initiate
+    [Arguments]       ${loanApp_No}    ${PAN_Number}    ${mobile_No}
+    Create Session    CAMS_initiate    url=${QA_URL}    verify=true
+    ${body}=    Create Dictionary
+    ...    loanApplicationNo=${loanApp_No}
+    ...    pan=${PAN_Number}
+    ...    mobileNumber=${mobile_No}
+    ...    source=${CAM_source}
+    ${headers}=    Build Headers    ${body}
+    ${response}=    POST On Session    CAMS_initiate    /api/v1/fetch/mutual-funds/initiate-otp
+    ...    json=${body}    headers=${headers}
+    Should Be Equal As Integers    ${response.status_code}    ${expected_code}
+    ${json}=    Set Variable    ${response.json()}
+    ${CAMS_referFetchID}=    Set Variable    ${json["data"]["referenceId"]}
+    Log To Console     TC_12: CAMS ReferFetchID: ${CAMS_referFetchID}
+    RETURN    ${CAMS_referFetchID}
+
+TC_13 CAMS_Fetch_Validate OTP
+    [Arguments]    ${CAMS_referFetchID}
+    Create Session    CAMS_validate    url=${QA_URL}    verify=true
+    ${body}=    Create Dictionary
+    ...    referenceId=${CAMS_referFetchID}
+    ...    otp=12345
+    ${headers}=    Build Headers    ${body}
+    ${response}=    POST On Session    CAMS_validate    /api/v1/fetch/mutual-funds/validate-otp
+    ...    json=${body}    headers=${headers}
+    Should Be Equal As Integers    ${response.status_code}    ${expected_code}
+    ${json}=    Set Variable    ${response.json()}
+    Log To Console     TC_13: ${json["status"]["message"]}
+
+TC_14 Eligible Holdings_CAMS
+    [Arguments]    ${loanApp_No}    ${CAMS_referFetchID}
+    Create Session    CAMS_Eligible_holding    url=${QA_URL}    verify=true
+    ${body}=    Create Dictionary
+    ...    loanApplicationNo=${loanApp_No}
+    ...    source=${CAM_source}
+    ${headers}=    Build Headers    ${body}
+    ${response}=    POST On Session    CAMS_Eligible_holding    /api/v1/fetch/mutual-funds/eligible-holdings
+    ...    json=${body}    headers=${headers}
+    Should Be Equal As Integers    ${response.status_code}    ${expected_code}
+    ${json}=    Set Variable    ${response.json()}
+    ${eligibleFunds}=    Get From Dictionary    ${json['data']['CAMS']}    eligibleFunds
+    ${eligibleFunds}=    Evaluate    __import__('json').loads($eligibleFunds) if isinstance($eligibleFunds, str) else $eligibleFunds
+    ${CAMS_funds}=    Get From List    ${eligibleFunds}    0
+    ${CAMS_funds}=    Evaluate    __import__('json').loads($CAMS_funds) if isinstance($CAMS_funds, str) else $CAMS_funds
+    Log To Console    TC_14: ${json["status"]["message"]}
+    RETURN    ${CAMS_funds}
+
+TC_15 Opt_MF_Using_Index_CAMS
+    [Arguments]     ${CAMS_funds}     ${CAMS_referFetchID}     ${loanApp_No}
+    [Documentation]     Fetch_opted - (CAMS)
+    Create Session      CAMS_Opt       url=${QA_URL}     verify=true
+
+    ${units}              Convert To Integer    ${CAMS_funds['units']}
+    ${opted_units}=       Convert To Integer    ${CAMS_funds['units']}
+
+    &{scheme}=    Create Dictionary
+    ...    rtaName=${CAMS_funds['rtaName']}
+    ...    amcCode=${CAMS_funds['amcCode']}
+    ...    schemeCode=${CAMS_funds['schemeCode']}
+    ...    isin=${CAMS_funds['isin']}
+    ...    folioNumber=${CAMS_funds['folioNumber']}
+    ...    units=${units}
+    ...    optedUnits=${opted_units}
+
+    @{optedSchemeDetails}=    Create List    ${scheme}
+
+    &{payload}=    Create Dictionary
+    ...    fetchId=${CAMS_referFetchID}
+    ...    loanApplicationNo=${loanApp_No}
+    ...    source=${CAM_source}
+    ...    productCode=${OD_productCode}
+    ...    optedSchemeDetails=${optedSchemeDetails}
+    ${headers}=    Build Headers    ${payload}
+
+    ${response}=       POST On Session      CAMS_Opt    /api/v1/fetch/mutual-funds/opted    json=${payload}    headers=${headers}
+    ${status_code}=    Convert To String    ${response.status_code}
+    Should Be Equal    ${status_code}       ${expected_code}
+    ${json_data}       Convert String To Json    ${response.content}
+    ${status_msg}      Get Value From Json    ${json_data}    status.message
+    ${msg}             Get From List          ${status_msg}     0
+    Log To Console     TC_15: ${msg}
+
+TC_16 Pledge Initiate CAMS
+    [Arguments]    ${CAMS_funds}    ${CAMS_referFetchID}    ${loanApp_No}
+    Create Session    CAMS_Pledge_initiate    url=${QA_URL}    verify=true
+    &{funds}=    Create Dictionary
+    ...    modeOfHolding=${modeOfHolding}
+    ...    rtaName=${CAMS_funds['rtaName']}
+    ...    amcCode=${CAMS_funds['amcCode']}
+    ...    amcName=${CAMS_funds['amcName']}
+    ...    folio=${CAMS_funds['folioNumber']}
+    ...    schemeCode=${CAMS_funds['schemeCode']}
+    ...    schemeName=${CAMS_funds['schemeName']}
+    ...    isin=${CAMS_funds['isin']}
+    ...    schemeType=${CAMS_funds['assetSubType']}
+    ...    schemeCategory=${schemeCategory}
+    ...    lienUnit=${lienUnit}
+    @{optedSchemeDetails}=    Create List    ${funds}
+    ${body}=    Create Dictionary
+    ...    loanApplicationNo=${loanApp_No}
+    ...    fetchRefId=${CAMS_referFetchID}
+    ...    source=${CAM_source}
+    ...    funds=${optedSchemeDetails}
+    ${headers}=    Build Headers    ${body}
+    ${response}=    POST On Session    CAMS_Pledge_initiate    /api/v1/pledge/mutual-funds/initiate-otp
+    ...    json=${body}    headers=${headers}
+    Should Be Equal As Integers    ${response.status_code}    ${expected_code}
+    ${json}=    Set Variable    ${response.json()}
+    ${CAMS_pledgeRefID}=    Set Variable    ${json["data"]["referenceId"]}
+    Log To Console     TC_16: CAMS_PledgeRefID: ${CAMS_pledgeRefID}, ${json["status"]["message"]}
+    RETURN    ${CAMS_pledgeRefID}
+
+TC_17 Pledge Validate CAMS
+    [Arguments]    ${CAMS_pledgeRefID}
+    Create Session    CAMS_Pledge_validate    url=${QA_URL}    verify=true
+    ${body}=    Create Dictionary
+    ...    referenceId=${CAMS_pledgeRefID}
+    ...    otp=12345
+    ${headers}=    Build Headers    ${body}
+    ${response}=    POST On Session    CAMS_Pledge_validate    /api/v1/pledge/mutual-funds/validate-otp
+    ...    json=${body}    headers=${headers}
+    Should Be Equal As Integers    ${response.status_code}    ${expected_code}
+    ${json}=    Set Variable    ${response.json()}
+    Log To Console     TC_17: ${json["status"]["message"]}
